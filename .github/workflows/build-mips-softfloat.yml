@@ -1,0 +1,114 @@
+name: Build MIPS Soft Float Node Exporter
+
+on:
+  workflow_dispatch:
+    inputs:
+      node_exporter_version:
+        description: 'Node Exporter Version Tag'
+        default: 'v1.6.1'
+        required: false
+      go_version:
+        description: 'Go Version'
+        default: '1.21'
+        required: false
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/build-mips-softfloat.yml'
+
+jobs:
+  build-mips-softfloat:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v3
+      
+    - name: Setup Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: ${{ github.event.inputs.go_version || '1.21' }}
+        
+    - name: Install Cross Compilation Tools
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y gcc-mips-linux-gnu gcc-mipsel-linux-gnu
+        
+    - name: Setup Build Environment
+      run: |
+        # Create output directory
+        mkdir -p builds
+        
+    - name: Build MIPS Soft Float (Big Endian)
+      run: |
+        echo "Building for MIPS soft float (big endian)"
+        CGO_ENABLED=1 \
+        GOOS=linux \
+        GOARCH=mips \
+        GOMIPS=softfloat \
+        CC=mips-linux-gnu-gcc \
+        go build -v -o builds/node_exporter.mips.softfloat \
+          -tags 'netgo osusergo static_build' \
+          -ldflags "-extldflags '-static' -X github.com/prometheus/common/version.Version=${{ github.event.inputs.node_exporter_version || '1.6.1' }} -X github.com/prometheus/common/version.Revision=$(git rev-parse --short HEAD) -X github.com/prometheus/common/version.Branch=main"
+          
+    - name: Build MIPSLE Soft Float (Little Endian)
+      run: |
+        echo "Building for MIPSLE soft float (little endian)"
+        CGO_ENABLED=1 \
+        GOOS=linux \
+        GOARCH=mipsle \
+        GOMIPS=softfloat \
+        CC=mipsel-linux-gnu-gcc \
+        go build -v -o builds/node_exporter.mipsle.softfloat \
+          -tags 'netgo osusergo static_build' \
+          -ldflags "-extldflags '-static' -X github.com/prometheus/common/version.Version=${{ github.event.inputs.node_exporter_version || '1.6.1' }} -X github.com/prometheus/common/version.Revision=$(git rev-parse --short HEAD) -X github.com/prometheus/common/version.Branch=main"
+          
+    - name: Verify Binaries
+      run: |
+        echo "MIPS Big Endian:"
+        file builds/node_exporter.mips.softfloat
+        echo "MIPS Little Endian:"
+        file builds/node_exporter.mipsle.softfloat
+        
+    - name: Create Release Archives
+      run: |
+        cd builds
+        # Package MIPS soft float
+        tar -czf node_exporter-${{ github.event.inputs.node_exporter_version || '1.6.1' }}.linux-mips.softfloat.tar.gz node_exporter.mips.softfloat
+        # Package MIPSLE soft float
+        tar -czf node_exporter-${{ github.event.inputs.node_exporter_version || '1.6.1' }}.linux-mipsle.softfloat.tar.gz node_exporter.mipsle.softfloat
+        # Generate checksums
+        sha256sum node_exporter-${{ github.event.inputs.node_exporter_version || '1.6.1' }}.linux-mips.softfloat.tar.gz > node_exporter-${{ github.event.inputs.node_exporter_version || '1.6.1' }}.linux-mips.softfloat.tar.gz.sha256
+        sha256sum node_exporter-${{ github.event.inputs.node_exporter_version || '1.6.1' }}.linux-mipsle.softfloat.tar.gz > node_exporter-${{ github.event.inputs.node_exporter_version || '1.6.1' }}.linux-mipsle.softfloat.tar.gz.sha256
+        
+    - name: Upload Build Artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: node_exporter-mips-softfloat-binaries
+        path: |
+          builds/node_exporter.mips.softfloat
+          builds/node_exporter.mipsle.softfloat
+          builds/*.tar.gz
+          builds/*.sha256
+          
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v1
+      if: github.ref == 'refs/heads/main'
+      with:
+        files: |
+          builds/node_exporter-${{ github.event.inputs.node_exporter_version || '1.6.1' }}.linux-mips.softfloat.tar.gz
+          builds/node_exporter-${{ github.event.inputs.node_exporter_version || '1.6.1' }}.linux-mips.softfloat.tar.gz.sha256
+          builds/node_exporter-${{ github.event.inputs.node_exporter_version || '1.6.1' }}.linux-mipsle.softfloat.tar.gz
+          builds/node_exporter-${{ github.event.inputs.node_exporter_version || '1.6.1' }}.linux-mipsle.softfloat.tar.gz.sha256
+        tag_name: softfloat-${{ github.event.inputs.node_exporter_version || '1.6.1' }}-$(date +%Y%m%d)
+        name: Node Exporter Soft Float Builds ${{ github.event.inputs.node_exporter_version || '1.6.1' }}
+        draft: false
+        prerelease: false
+        body: |
+          Automated build of Node Exporter with soft float support for MIPS architectures.
+          
+          ## Included Builds
+          - MIPS soft float (big endian)
+          - MIPSLE soft float (little endian)
+          
+          These builds are specifically compiled for devices without hardware floating point units.
