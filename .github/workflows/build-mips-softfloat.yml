@@ -22,10 +22,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout Code
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       
     - name: Setup Go
-      uses: actions/setup-go@v4
+      uses: actions/setup-go@v5
       with:
         go-version: ${{ github.event.inputs.go_version || '1.21' }}
         
@@ -36,7 +36,6 @@ jobs:
         
     - name: Setup Build Environment
       run: |
-        # Create output directory
         mkdir -p builds
         
     - name: Build MIPS Soft Float (Big Endian)
@@ -73,16 +72,13 @@ jobs:
     - name: Create Release Archives
       run: |
         cd builds
-        # Package MIPS soft float
         tar -czf node_exporter-${{ github.event.inputs.node_exporter_version || '1.6.1' }}.linux-mips.softfloat.tar.gz node_exporter.mips.softfloat
-        # Package MIPSLE soft float
         tar -czf node_exporter-${{ github.event.inputs.node_exporter_version || '1.6.1' }}.linux-mipsle.softfloat.tar.gz node_exporter.mipsle.softfloat
-        # Generate checksums
         sha256sum node_exporter-${{ github.event.inputs.node_exporter_version || '1.6.1' }}.linux-mips.softfloat.tar.gz > node_exporter-${{ github.event.inputs.node_exporter_version || '1.6.1' }}.linux-mips.softfloat.tar.gz.sha256
         sha256sum node_exporter-${{ github.event.inputs.node_exporter_version || '1.6.1' }}.linux-mipsle.softfloat.tar.gz > node_exporter-${{ github.event.inputs.node_exporter_version || '1.6.1' }}.linux-mipsle.softfloat.tar.gz.sha256
         
     - name: Upload Build Artifacts
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: node_exporter-mips-softfloat-binaries
         path: |
@@ -90,6 +86,7 @@ jobs:
           builds/node_exporter.mipsle.softfloat
           builds/*.tar.gz
           builds/*.sha256
+        retention-days: 30
           
     - name: Create GitHub Release
       uses: softprops/action-gh-release@v1
