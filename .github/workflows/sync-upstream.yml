@@ -5,6 +5,9 @@ on:
     - cron: '0 0 * * 0'  # 每周日 UTC 0点运行
   workflow_dispatch:     # 允许手动触发
 
+permissions:
+  contents: write
+
 jobs:
   sync:
     runs-on: ubuntu-latest
@@ -14,19 +17,34 @@ jobs:
       with:
         token: ${{ secrets.GITHUB_TOKEN }}
         ref: master
+        fetch-depth: 0  # 获取完整历史
         
     - name: Setup Git
       run: |
         git config --global user.name 'GitHub Actions'
         git config --global user.email 'actions@github.com'
+        git config --global pull.rebase false
         
     - name: Add upstream
       run: |
-        git remote add upstream https://github.com/prometheus/node_exporter.git
+        git remote add upstream https://github.com/prometheus/node_exporter.git 2>/dev/null || true
         git fetch upstream
         
-    - name: Sync with upstream
+    - name: Sync with upstream (rebase approach)
       run: |
         git checkout master
-        git merge upstream/master
-        git push origin master
+        
+        # 使用 rebase 而不是 merge
+        git rebase upstream/master || {
+          echo "Rebase failed, trying to reset to upstream"
+          git reset --hard upstream/master
+        }
+        
+        # 强制推送更新
+        git push --force-with-lease origin master
+        
+    - name: Completion message
+      run: |
+        echo "Sync with upstream completed"
+        echo "Last 5 commits:"
+        git log --oneline -5
